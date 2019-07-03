@@ -4,7 +4,7 @@ use strict;
 use IO::Read qw(ioread);
 use WebDAV::Ligero::Field;
 use POSIX qw(sysconf :unistd_h);
-our $VERSION = 0.1;
+our $VERSION = 0.11;
 
 use constant METHODS =>
  qw(COPY DELETE GET HEAD LOCK MKCOL MOVE OPTIONS POST PROPFIND PROPPATCH PUT TRACE UNLOCK);
@@ -30,7 +30,7 @@ sub initialize{
   $_->max_header || $_->max_header($max_header) || $_->max_header($_->read_buf) || return;
   $_->timeout || $_->timeout($timeout) || $_->timeout(10) || return;
   $_->max_content || $_->max_content($max_content) || $_->max_content(2*$_->read_buf) || return;
-  $_->source || $_->source($source) || $_->source(*STDIN) || return;
+  $_->source || $_->source($source) || $_->source(\*STDIN) || return;
   $$self{_initialized} = 1;
 }
 
