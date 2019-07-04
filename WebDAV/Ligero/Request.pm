@@ -3,12 +3,11 @@ use strict;
 
 use IO::Read qw(ioread);
 use WebDAV::Ligero::Field;
-use POSIX qw(sysconf :unistd_h);
-our $VERSION = 0.11;
+our $VERSION = 0.12;
 
 use constant METHODS =>
  qw(COPY DELETE GET HEAD LOCK MKCOL MOVE OPTIONS POST PROPFIND PROPPATCH PUT TRACE UNLOCK);
-our ($read_buf, $max_header, $timeout, $max_content, $source);
+our ($read_buf, $max_header, $max_content);
 
 sub new { bless {} => ref($_[0]) || $_[0] }
 #+----------------+#
@@ -26,11 +25,9 @@ sub initialize{
   local $_ = my $self = shift;
   return 1 if $$self{_initialized};
   ($self->_firstline,$self->_buffer) = ('','');
-  $_->read_buf || $_->read_buf($read_buf) || $_->read_buf(sysconf _SC_PAGESIZE) || return;
-  $_->max_header || $_->max_header($max_header) || $_->max_header($_->read_buf) || return;
-  $_->timeout || $_->timeout($timeout) || $_->timeout(10) || return;
-  $_->max_content || $_->max_content($max_content) || $_->max_content(2*$_->read_buf) || return;
-  $_->source || $_->source($source) || $_->source(\*STDIN) || return;
+  $_->read_buf || $_->read_buf($read_buf) || $_->read_buf(4096);
+  $_->max_header || $_->max_header($max_header) || $_->max_header(1024);
+  $_->max_content || $_->max_content($max_content) || $_->max_content(4096*1024);
   $$self{_initialized} = 1;
 }
 
@@ -47,36 +44,23 @@ sub max_header{
   $$self{_max_header} = shift if $_[0] && $_[0] =~ /^\d+$/;
   $$self{_max_header};
 }
-sub timeout{
-  my $self = shift;
-  $$self{_timeout} = shift if defined $_[0] && $_[0] =~ /^\d+$/;
-  $$self{_timeout};
-}
 sub max_content{
   my $self = shift;
   $$self{_max_content} = shift if $_[0] && $_[0] =~ /^\d+$/;
   $$self{_max_content};
 }
-sub source{
-  my $self = shift;
-  $$self{_source} = shift if $_[0] && ref $_[0] eq 'GLOB';
-  $$self{_source};
-}
 sub error{
   my $self = shift;
-  #make error read only for the calling module or script
   $$self{_error} = shift if $#_ > -1;
   $$self{_error};
 }
 sub method{
   my $self = shift;
-  #check if method is valid and supported
   $$self{_method} = shift if $#_ > -1;
   $$self{_method};
 }
 sub uri{
   my $self = shift;
-  #check if uri is valid
   $$self{_uri} = shift if $#_ > -1;
   $$self{_uri};
 }
@@ -99,7 +83,7 @@ sub payload : lvalue{
 sub _fetch_firstline{
   my $self = shift;
   $$self{_initialized} = 0;
-  local $_ = ioread(fh=>$self->source, rmax=>$self->max_header, rbuf=>$self->read_buf);
+  local $_ = ioread(rmax=>$self->max_header);
   $self->error($$_) and return if defined && ref eq 'SCALAR';
   $self->error('method and/or uri') and return unless s!^(([^ ]+) ([^ ]+) [^ ]+\015?\012)!!;
   my ($firstline,$method,$uri) = ($1,$2,$3);
@@ -112,8 +96,8 @@ sub _fetch_fields{
   my $self = shift;
   local $_ = $self->_buffer;
   my $rmax = $self->max_header-length($self->_firstline)-length;
-  while(!/\015?\012\015?\012/ && $rmax > 0 && !eof){
-    my $line = ioread(rmax=>$rmax, rbuf=>$self->read_buf);
+  while(!/\015?\012\015?\012/ && $rmax > 0 && !eof STDIN){
+    my $line = ioread(rmax=>$rmax);
     $self->error($$line) and return if defined $line && ref $line eq 'SCALAR';
     $rmax -= length $line;
     $self->_buffer = $_ .= $line}
@@ -134,7 +118,8 @@ sub _fetch_content{
   $self->error('max content-length') and return unless $length <= $self->max_content;
   my $rmax = $length-length $self->_buffer;
   $self->error('content-length mismatch') and return unless $rmax >= 0;
-  my $content = ioread(rbytes=>1, rmax=>$rmax, rbuf=>$self->read_buf) if $rmax;
+  my $rbuf = $self->read_buf > $rmax ? $rmax : $self->read_buf;
+  my $content = ioread(rbytes=>1, rmax=>$rmax, rbuf=>$rbuf) if $rmax;
   $self->error($$content) and return if defined $content && ref $content eq 'SCALAR';
   $self->_buffer .= $content if defined $content && length $content;
   $self->error('content-length overflow') and return if $length < length $self->_buffer;
