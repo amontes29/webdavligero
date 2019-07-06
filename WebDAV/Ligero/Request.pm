@@ -3,7 +3,7 @@ use strict;
 
 use IO::Read qw(ioread);
 use WebDAV::Ligero::Field;
-our $VERSION = 0.12;
+our $VERSION = 0.13;
 
 use constant METHODS =>
  qw(COPY DELETE GET HEAD LOCK MKCOL MOVE OPTIONS POST PROPFIND PROPPATCH PUT TRACE UNLOCK);
@@ -49,17 +49,17 @@ sub max_content{
   $$self{_max_content} = shift if $_[0] && $_[0] =~ /^\d+$/;
   $$self{_max_content};
 }
-sub error{
+sub error : lvalue {
   my $self = shift;
   $$self{_error} = shift if $#_ > -1;
   $$self{_error};
 }
-sub method{
+sub method : lvalue {
   my $self = shift;
   $$self{_method} = shift if $#_ > -1;
   $$self{_method};
 }
-sub uri{
+sub uri : lvalue {
   my $self = shift;
   $$self{_uri} = shift if $#_ > -1;
   $$self{_uri};
@@ -143,7 +143,11 @@ sub _requires_payload{
   my $self = shift;
   local $_ = $self->method;
   return unless defined;
-  /^(?:PROPFIND|PUT|POST)$/ ? 1 : 0;
+  if($_ eq 'PROPFIND'){
+    $self->field('content-length') ? 1 : 0;
+  }else{
+    /^(?:PUT|POST)$/ ? 1 : 0;
+  }
 }
 
 1;
