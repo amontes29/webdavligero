@@ -5,13 +5,14 @@ package myWebDAV;
 
 use base qw(Net::Server);
 use WebDAV::Ligero::Request;
+use WebDAV::Ligero::Response;
 
 sub process_request{
   my $req = WebDAV::Ligero::Request->new;
   $req->parse;
-  use Data::Dumper;
-  print Dumper $req;
-  #print $webdav->response_toString;
+  my $res = WebDAV::Ligero::Response->new;
+  $res->populate($req);
+  print $res->string;
 }
 
 
